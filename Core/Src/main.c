@@ -63,18 +63,10 @@ char uart_bufT[1000];
 //char uart_bufR[100];
 int uart_buf_len;
 
-char spi_buf[30];
-int state;
 uint16_t d_in;
 
-
-const double v_ref = 3.0;
-const int max_dec = 65536;
 int last_r = 3;
 
-char help[] = "Correct format for communication with compensation coils driver:\r\n"
-			  "\r\n"
-			  "time should be more than of 1 ms\r\n";
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -86,6 +78,7 @@ void StartThread(void const * argument);
 
 /* USER CODE BEGIN PFP */
 void AcceptanceNewClient(int * argument);
+void debug_msg(char * msg);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -339,13 +332,6 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
-void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
-{
-
-}
-
-
-
 
 void AcceptanceNewClient(int * argument)
 {
@@ -376,7 +362,10 @@ void AcceptanceNewClient(int * argument)
 	}
 }
 
-
+void debug_msg(char * msg){
+	uart_buf_len = sprintf(uart_bufT, "%s \r\n", msg);
+	HAL_UART_Transmit(&huart3, (uint8_t*)uart_bufT, uart_buf_len, 100);
+}
 /* USER CODE END 4 */
 
 /* USER CODE BEGIN Header_StartThread */
@@ -388,6 +377,7 @@ void AcceptanceNewClient(int * argument)
 /* USER CODE END Header_StartThread */
 void StartThread(void const * argument)
 {
+  debug_msg("program started \r\n");
   /* init code for LWIP */
   MX_LWIP_Init();
   /* USER CODE BEGIN 5 */
@@ -414,10 +404,7 @@ void StartThread(void const * argument)
 		}
 		ClientHandle = osThreadCreate(osThread(Acceptance), &g);
 //		osThreadTerminate(ClientHandle);
-
-		uart_buf_len = sprintf(uart_bufT, "new connection...! \r\n"
-							              "Connected to Compensation Coils Driver! \r\n\n%s\r\n", (char*)help);
-		HAL_UART_Transmit(&huart3, (uint8_t*)uart_bufT, uart_buf_len, 100);
+		debug_msg("new connection...! \r\n");
 		write(g, (char*)uart_bufT, strlen(uart_bufT));
 		HAL_GPIO_TogglePin(LD1_GPIO_Port, LD1_Pin);
 		osDelay(100);
