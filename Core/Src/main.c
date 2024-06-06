@@ -69,48 +69,13 @@ char spi_buf[30];
 int state;
 uint16_t d_in;
 
-/* create an array for DAC's values:
 
-		row 0 for DAC1: X1, Y1, Z1, T1
-		row 1 for DAC2: X2, Y2, Z2, T2
-		row 2 for DAC3: X3, Y3, Z3, T3
-
-		X,Y,Z are voltage value in volt and T is time in ms
-
-*/
-double DAC[4][4] = {
-		{0.0, 0.0, 0.0, 0.0},
-		{0.1, 0.1, 0.1, 1.0},
-		{-0.1, -0.1, -0.1, 1.0},
-		{0.0, 0.0, 0.0, 1.0}
-};
 const double v_ref = 3.0;
 const int max_dec = 65536;
 int last_r = 3;
 
 char help[] = "Correct format for communication with compensation coils driver:\r\n"
 			  "\r\n"
-			  "for getting help!\r\n"
-			  "help\r\n"
-			  "\r\n"
-			  "for closing connection!\r\n"
-			  "exit\r\n"
-			  "\r\n"
-			  "for sending values:\r\n"
-			  "DAC: state: val1; val2; val3; time\r\n"
-			  "or\r\n"
-			  "DAC: state; val1; val2; val3; time\r\n"
-			  "or\r\n"
-			  "DAC: state val1; val2; val3; time\r\n"
-			  "EXAMPLE:\r\n"
-			  "DAC: 000: 1.2565; -2.30; -0.065; 150\r\n"
-			  "\r\n"
-			  "for sending more state:\r\n"
-			  "DAC: state: val1; val2; val3; time; & state: val1; val2; val3; time; & state: val1; val2; val3; time\r\n"
-			  "\r\n"
-			  "all states:\r\n"
-			  "state1: 000; state2: 001; state3: 010\r\n"
-			  "values should be between: -3.0 v - +3.0 v\r\n"
 			  "time should be more than of 1 ms\r\n";
 /* USER CODE END PV */
 
@@ -124,10 +89,6 @@ void StartThread(void const * argument);
 
 /* USER CODE BEGIN PFP */
 void AcceptanceNewClient(int * argument);
-void SendSpiMesToDac(uint32_t);
-void SetDAC(uint8_t channel, uint16_t value);
-void SendToDAC(int r);
-int ExtractMessage(char* msg);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -177,20 +138,6 @@ int main(void)
   MX_SPI1_Init();
   /* USER CODE BEGIN 2 */
 
-  // DAC - Reset select.
-  // If RSTSEL is low, input coding is binary;
-  // if high = 2's complement
-  HAL_GPIO_WritePin(RSTSEL_GPIO_Port, RSTSEL_Pin, GPIO_PIN_RESET);
-
-  SetDAC(0, 0);
-  SetDAC(1, 0);
-  SetDAC(2, 0);
-  SetDAC(3, 0);
-
-  // DIR SET means: positive and DIR RESET means: negative
-  HAL_GPIO_WritePin(DIR1_GPIO_Port, DIR1_Pin, GPIO_PIN_SET);
-  HAL_GPIO_WritePin(DIR2_GPIO_Port, DIR2_Pin, GPIO_PIN_SET);
-  HAL_GPIO_WritePin(DIR3_GPIO_Port, DIR3_Pin, GPIO_PIN_SET);
 
   /* USER CODE END 2 */
 
@@ -503,178 +450,11 @@ static void MX_GPIO_Init(void)
 /* USER CODE BEGIN 4 */
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 {
-	/*
-	 * In new board version, there are only 3 input TTLs.
-	 * TTL1, TTL2 are used to set state
-	 * TTL3 is used to trigger state change
-	 */
 
-  HAL_GPIO_TogglePin(GPIOB, LD1_Pin);
-  if(GPIO_Pin==TTL3_Pin)
-  {
-	  if(HAL_GPIO_ReadPin(GPIOE, TTL1_Pin) == GPIO_PIN_RESET &&
-		 HAL_GPIO_ReadPin(TTL2_GPIO_Port, TTL2_Pin) == GPIO_PIN_RESET
-	  ){
-		  // state 1 row 0 in the DAC's array
-		  if(last_r != 0){
-			  SendToDAC(0);
-		  }
-	  }else if(HAL_GPIO_ReadPin(GPIOE, TTL1_Pin) == GPIO_PIN_SET &&
-			  HAL_GPIO_ReadPin(TTL2_GPIO_Port, TTL2_Pin) == GPIO_PIN_RESET
-	  ){
-		  // state 2 row 1 in the DAC's array
-		  if(last_r != 1){
-			  SendToDAC(1);
-		  }
-	  }else if(HAL_GPIO_ReadPin(GPIOE, TTL1_Pin) == GPIO_PIN_RESET &&
-				 HAL_GPIO_ReadPin(TTL2_GPIO_Port, TTL2_Pin) == GPIO_PIN_SET
-				 ){
-		  // state 3 row 2 in the DAC's array
-		  if(last_r != 2){
-			  SendToDAC(2);
-		  }
-	  }
-  }
 }
 
-void SendSpiMesToDac(uint32_t message){
-	/*
-	 * New function for new DAC converter on version 2 of board
-	 */
-	HAL_StatusTypeDef status;
-	uint8_t dataToSend[3] = {
-			(message >> 0) & 0xFF,
-	        (message >> 8) & 0xFF,
-	        (message >> 16)& 0xFF
-	};
-	status = HAL_SPI_Transmit(&hspi1, dataToSend, 1, 100);
-	if (status != HAL_OK) {
-	}
-}
 
-void SetDAC(uint8_t channel, uint16_t value){
-	/*
-	 * New function for new DAC converter on version 2 of board
-	 */
-	uint32_t message = 0x00000000;
-	message = message | (value & 0xFFFF);
-	message = message | (((uint32_t)channel & 0b11) << 17);
-	SendSpiMesToDac(message);
 
-	// LDAC load DACs, rising edge triggered loads all DAC register
-	HAL_GPIO_WritePin(LDAC_GPIO_Port, LDAC_Pin, GPIO_PIN_SET);
-	HAL_GPIO_WritePin(LDAC_GPIO_Port, LDAC_Pin, GPIO_PIN_RESET);
-}
-
-void SendToDAC(int r)  // original Mehrdad's function
-/*
- * r - state number (0-3) (depends on TTLs state)
- */
-{
-	uint32_t t0, t1, t;
-	if(DAC[r][3] < 1){
-		DAC[r][3] = 1;
-	}
-
-	int n = round(DAC[r][3]*58);	// 58 to apply values to DAC
-	double dif1, dif2, dif3;
-
-	// x? this part need for sending correct value in first loop
-	// state = 1;
-//	d_in = abs(round(((DAC[0][0])/v_ref) * max_dec));
-
-	/*******************************
-	spi_buf[0] = 0x00;
-	spi_buf[1] = ((uint8_t*)&d_in)[1];
-	spi_buf[2] = ((uint8_t*)&d_in)[0];
-
-//	HAL_GPIO_WritePin(CS3_GPIO_Port, CS3_Pin, RESET);
-//	HAL_GPIO_WritePin(GPIOE, CS1_Pin, RESET);
-//	HAL_SPI_Transmit_IT(&hspi4, (uint8_t *)&spi_buf, 3);
-
-//	while(state){}
- * *****************************************
- * changed to \|/ */
-//	SetDAC(0, d_in);
-//	SetDAC(1, d_in);
-//	SetDAC(2, d_in);
-	/*        /|\   */
-
-	// x? this part need for sending correct value in first loop
-
-	dif1 = fabs(DAC[r][0] - DAC[last_r][0])/n;
-	dif2 = fabs(DAC[r][1] - DAC[last_r][1])/n;
-	dif3 = fabs(DAC[r][2] - DAC[last_r][2])/n;
-
-	DAC[3][0] = DAC[last_r][0];
-	DAC[3][1] = DAC[last_r][1];
-	DAC[3][2] = DAC[last_r][2];
-
-	if(r == 3){
-		n = 1;
-	}
-
-	t0 = HAL_GetTick();
-	for(int i = 1; i <= n; i++){
-
-		if(DAC[r][0] > DAC[last_r][0]){
-			DAC[3][0] += dif1;
-		}else{
-			DAC[3][0] -= dif1;
-		}
-		if(DAC[r][1] > DAC[last_r][1]){
-			DAC[3][1] += dif2;
-		}else{
-			DAC[3][1] -= dif2;
-		}
-		if(DAC[r][2] > DAC[last_r][2]){
-			DAC[3][2] += dif3;
-		}else{
-			DAC[3][2] -= dif3;
-		}
-
-		for(int j = 0; j < 3; j++){
-
-			  state = 1;
-
-			  switch(j){
-				  case 0:
-					  if(DAC[3][j] >= 0){
-						  HAL_GPIO_WritePin(DIR1_GPIO_Port, DIR1_Pin, GPIO_PIN_SET);
-					  }else{
-						  HAL_GPIO_WritePin(DIR1_GPIO_Port, DIR1_Pin, GPIO_PIN_RESET);
-					  }
-					  break;
-				  case 1:
-					  if(DAC[3][j] >= 0){
-						  HAL_GPIO_WritePin(DIR2_GPIO_Port, DIR2_Pin, GPIO_PIN_SET);
-					  }else{
-						  HAL_GPIO_WritePin(DIR2_GPIO_Port, DIR2_Pin, GPIO_PIN_RESET);
-					  }
-					  break;
-				  case 2:
-					  if(DAC[3][j] >= 0){
-						  HAL_GPIO_WritePin(DIR3_GPIO_Port, DIR3_Pin, GPIO_PIN_SET);
-					  }else{
-						  HAL_GPIO_WritePin(DIR3_GPIO_Port, DIR3_Pin, GPIO_PIN_RESET);
-					  }
-					  break;
-			  }
-
-			  if(fabs(DAC[3][j]) > v_ref){
-				  d_in = 0xffff;
-			  }else{
-				  d_in = abs(round((DAC[3][j]/v_ref) * max_dec));
-			  }
-
-			  SetDAC(j, d_in);
-		}
-	}
-
-	t1 = HAL_GetTick();
-	t = t1 - t0;
-	last_r = r;
-}
 
 void AcceptanceNewClient(int * argument)
 {
@@ -696,7 +476,7 @@ void AcceptanceNewClient(int * argument)
 
 			memset(msg, 0, sizeof msg);
 			state = read(conn, (char*)msg, 200);
-			newVal = ExtractMessage(msg);
+			newVal = "hello";
 			if(state <= 0){
 				newVal = 3;
 			}
@@ -705,209 +485,6 @@ void AcceptanceNewClient(int * argument)
 	}
 }
 
-int ExtractMessage(char* msg){
-
-	char temp[100] = {};
-	int j = 0, k = 0, f1 = 1, f2 = 1, f3 = 0;
-	double temp_dac[3][4];
-
-	for(int a = 0; a < 3; a++){
-		for(int b = 0; b < 4; b++){
-			temp_dac[a][b] = DAC[a][b];
-		}
-	}
-	for(int i = 0; i < strlen(msg); i++){
-		if(msg[i] == ':'){
-			if(strcmp(temp, "DAC") != 0){
-				return 0;
-			}else{
-
-				f1 = 1;
-				i++;	// for removing first space after DAC:
-				j = 0;
-				memset(temp, 0, sizeof temp);
-				while(f1){
-					i++;
-					if(msg[i] == ' ' || msg[i] == ':' || msg[i] == ';' || i >= strlen(msg)){
-						f2 = 1;
-						if(strcmp(temp, "000") == 0){
-							j = 0;
-							memset(temp, 0, sizeof temp);
-							while(f2){
-								i++;
-								if(msg[i] == ';'){
-									temp_dac[0][k] = atof(temp);
-									k++;
-									j = 0;
-									memset(temp, 0, sizeof temp);
-								}else if(i >= strlen(msg)){
-									if(k == 3){
-										temp_dac[0][k] = atof(temp);
-										k++;
-										j = 0;
-										memset(temp, 0, sizeof temp);
-									}else{
-										uart_buf_len = sprintf(uart_bufT, "the format is wrong: %s\r\n\n%s\r\n", (char*)temp, (char*)help);
-										HAL_UART_Transmit(&huart3, (uint8_t*)uart_bufT, uart_buf_len, 100);
-										return 0;
-									}
-								}else{
-									temp[j] = msg[i];
-									j++;
-									continue;
-								}
-								if(k > 3){
-									f2 = 0;
-									f3 = 1;
-									k = 0;
-									for(int m = 0; m < 4; m++){
-										DAC[0][m] = temp_dac[0][m];
-									}
-								}
-							}
-						}else if(strcmp(temp, "001") == 0){
-							j = 0;
-							memset(temp, 0, sizeof temp);
-							while(f2){
-								i++;
-								if(msg[i] == ';'){
-
-									temp_dac[1][k] = atof(temp);
-									k++;
-									j = 0;
-									memset(temp, 0, sizeof temp);
-								}else if(i >= strlen(msg)){
-
-									if(k == 3){
-
-										temp_dac[1][k] = atof(temp);
-										k++;
-										j = 0;
-										memset(temp, 0, sizeof temp);
-									}else{
-
-										uart_buf_len = sprintf(uart_bufT, "the format is wrong: %s\r\n\n%s\r\n", (char*)temp, (char*)help);
-										HAL_UART_Transmit(&huart3, (uint8_t*)uart_bufT, uart_buf_len, 100);
-										return 0;
-									}
-								}else{
-									temp[j] = msg[i];
-									j++;
-									continue;
-								}
-								if(k > 3){
-									f2 = 0;
-									f3 = 1;
-									k = 0;
-
-									for(int m = 0; m < 4; m++){
-										DAC[1][m] = temp_dac[1][m];
-									}
-								}
-							}
-						}else if(strcmp(temp, "010") == 0){
-
-							j = 0;
-							memset(temp, 0, sizeof temp);
-
-							while(f2){
-
-								i++;
-
-								if(msg[i] == ';'){
-
-									temp_dac[2][k] = atof(temp);
-									k++;
-									j = 0;
-									memset(temp, 0, sizeof temp);
-								}else if(i >= strlen(msg)){
-
-									if(k == 3){
-
-										temp_dac[2][k] = atof(temp);
-										k++;
-										j = 0;
-										memset(temp, 0, sizeof temp);
-									}else{
-
-										uart_buf_len = sprintf(uart_bufT, "the format is wrong: %s\r\n\n%s\r\n", (char*)temp, (char*)help);
-										HAL_UART_Transmit(&huart3, (uint8_t*)uart_bufT, uart_buf_len, 100);
-										return 0;
-									}
-								}else{
-
-									temp[j] = msg[i];
-									j++;
-									continue;
-								}
-								if(k > 3){
-
-									f2 = 0;
-									f3 = 1;
-									k = 0;
-
-									for(int m = 0; m < 4; m++){
-										DAC[2][m] = temp_dac[2][m];
-									}
-								}
-							}
-						}else{
-
-							uart_buf_len = sprintf(uart_bufT, "the format is wrong: %s\r\n\n%s\r\n", (char*)temp, (char*)help);
-							HAL_UART_Transmit(&huart3, (uint8_t*)uart_bufT, uart_buf_len, 100);
-							return 0;
-						}
-					}else{
-
-						temp[j] = msg[i];
-						j++;
-						continue;
-					}
-
-					while(f3){
-
-						i++;
-						if(msg[i] == '&'){
-
-							f3 = 0;
-							i++;	// for removing first space after $
-						}else if(i >= strlen(msg)){
-
-							f3 = 0;
-							f1 = 0;
-
-							return 2;
-						}
-					}
-				}
-			}
-		}else{
-
-			temp[j] = msg[i];
-
-			if(strcmp(temp, "exit") == 0 || strcmp(temp, "Exit") == 0 || strcmp(temp, "EXIT") == 0){
-
-				uart_buf_len = sprintf(uart_bufT, "Exit!\r\n");
-				HAL_UART_Transmit(&huart3, (uint8_t*)uart_bufT, uart_buf_len, 100);
-
-				return 3;
-			}else if(strcmp(temp, "help") == 0 || strcmp(temp, "Help") == 0 || strcmp(temp, "HELP") == 0){
-
-				uart_buf_len = sprintf(uart_bufT, "%s\r\n", (char*)help);
-				HAL_UART_Transmit(&huart3, (uint8_t*)uart_bufT, uart_buf_len, 100);
-
-				return 1;
-			}
-			j++;
-
-			continue;
-		}
-	}
-
-	uart_buf_len = sprintf(uart_bufT, "wrong msg: %s\r\n\n%s\r\n", (char*)temp, (char*)help);
-	HAL_UART_Transmit(&huart3, (uint8_t*)uart_bufT, uart_buf_len, 100);
-	return 0;
-}
 
 /* USER CODE END 4 */
 
@@ -932,8 +509,6 @@ void StartThread(void const * argument)
 
   err = bind(sock, (struct sockaddr *)&address, sizeof (address));
   err = listen(sock, 0);
-
-  SendToDAC(3);
 
   // create the acceptance thread
   osThreadDef(Acceptance, AcceptanceNewClient, osPriorityLow, 0, configMINIMAL_STACK_SIZE *2);
