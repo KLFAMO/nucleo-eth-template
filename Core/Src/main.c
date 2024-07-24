@@ -39,7 +39,6 @@
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 #define PORT	22
-
 #define MAX(a,b) (((a)>(b))?(a):(b))
 /* USER CODE END PD */
 
@@ -63,10 +62,6 @@ char uart_bufT[1000];
 //char uart_bufR[100];
 int uart_buf_len;
 
-uint16_t d_in;
-
-int last_r = 3;
-
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -77,7 +72,7 @@ static void MX_USART3_UART_Init(void);
 void StartThread(void const * argument);
 
 /* USER CODE BEGIN PFP */
-void AcceptanceNewClient(int * argument);
+void AcceptanceNewClient(void const * argument);
 void debug_msg(char * msg);
 /* USER CODE END PFP */
 
@@ -126,7 +121,7 @@ int main(void)
   MX_GPIO_Init();
   MX_USART3_UART_Init();
   /* USER CODE BEGIN 2 */
-
+  debug_msg("******** Start Nucleo ******************");
 
   /* USER CODE END 2 */
 
@@ -333,33 +328,28 @@ static void MX_GPIO_Init(void)
 
 /* USER CODE BEGIN 4 */
 
-void AcceptanceNewClient(int * argument)
+void AcceptanceNewClient(void const * argument)
 {
-
 	char msg[200] = {};
-	int newVal = 0, state = 1;
-	int conn = *argument;
+	char umsg[100] = {};
+	int state = 1;
+	int conn = *(int *)argument;
 
+	debug_msg("acceptancenewclient");
 	while(1)
 	{
-		if(newVal == 3){
-			close(conn);
-			osThreadTerminate(NULL);
-//			osThreadSuspend(NULL);
-		}else if(newVal == 2){
-			last_r = 3;
-			newVal = 0;
-		}else{
-
 			memset(msg, 0, sizeof msg);
-			state = read(conn, (char*)msg, 200);
-			newVal = "hello";
+			state = read(conn, (char*)msg, sizeof(msg)-1);
+			sprintf(umsg, "state= %d", state);
+			debug_msg(umsg);
+			write(conn, "hello\n", 7);
 			if(state <= 0){
-				newVal = 3;
-			}
+				close(conn);
+				osThreadTerminate(NULL);
 		}
 		osDelay(100);
 	}
+
 }
 
 void debug_msg(char * msg){
@@ -377,7 +367,6 @@ void debug_msg(char * msg){
 /* USER CODE END Header_StartThread */
 void StartThread(void const * argument)
 {
-  debug_msg("program started \r\n");
   /* init code for LWIP */
   MX_LWIP_Init();
   /* USER CODE BEGIN 5 */
@@ -397,7 +386,7 @@ void StartThread(void const * argument)
   /* Infinite loop */
   for(;;)
   {
-		g =  accept(sock, NULL, NULL);
+		int g =  accept(sock, NULL, NULL);
 		if(g < 0){
 			osDelay(100);
 			continue;
@@ -405,7 +394,7 @@ void StartThread(void const * argument)
 		ClientHandle = osThreadCreate(osThread(Acceptance), &g);
 //		osThreadTerminate(ClientHandle);
 		debug_msg("new connection...! \r\n");
-		write(g, (char*)uart_bufT, strlen(uart_bufT));
+		//write(g, (char*)uart_bufT, strlen(uart_bufT));
 		HAL_GPIO_TogglePin(LD1_GPIO_Port, LD1_Pin);
 		osDelay(100);
   }
