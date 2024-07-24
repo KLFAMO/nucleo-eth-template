@@ -54,7 +54,7 @@ UART_HandleTypeDef huart3;
 osThreadId StartHandle;
 /* USER CODE BEGIN PV */
 osThreadId ClientHandle;
-int sock, g;
+int sock;
 struct sockaddr_in address;
 err_t err = -1;
 
@@ -392,7 +392,6 @@ void StartThread(void const * argument)
 			continue;
 		}
 		ClientHandle = osThreadCreate(osThread(Acceptance), &g);
-//		osThreadTerminate(ClientHandle);
 		debug_msg("new connection...! \r\n");
 		//write(g, (char*)uart_bufT, strlen(uart_bufT));
 		HAL_GPIO_TogglePin(LD1_GPIO_Port, LD1_Pin);
