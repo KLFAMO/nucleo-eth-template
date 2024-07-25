@@ -29,6 +29,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include "cmd_parser.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -330,7 +331,8 @@ static void MX_GPIO_Init(void)
 
 void AcceptanceNewClient(void const * argument)
 {
-	char msg[200] = {};
+	char msg[100] = {};
+	char send_msg[100] = {};
 	char umsg[100] = {};
 	int state = 1;
 	int conn = *(int *)argument;
@@ -338,18 +340,22 @@ void AcceptanceNewClient(void const * argument)
 	debug_msg("acceptancenewclient");
 	while(1)
 	{
-			memset(msg, 0, sizeof msg);
-			state = read(conn, (char*)msg, sizeof(msg)-1);
-			sprintf(umsg, "state= %d", state);
-			debug_msg(umsg);
-			write(conn, "hello\n", 7);
-			if(state <= 0){
-				close(conn);
-				osThreadTerminate(NULL);
+		memset(msg, 0, sizeof msg);
+		memset(send_msg, 0, sizeof send_msg);
+		state = read(conn, (char*)msg, sizeof(msg)-1);
+		sprintf(umsg, "state= %d", state);
+		debug_msg(umsg);
+
+		if(state <= 0){
+			close(conn);
+			osThreadTerminate(NULL);
+		}
+		else{
+			cmd_parse(msg, send_msg);
+			write(conn, send_msg, strlen(send_msg));
 		}
 		osDelay(100);
 	}
-
 }
 
 void debug_msg(char * msg){
@@ -381,7 +387,7 @@ void StartThread(void const * argument)
   err = listen(sock, 0);
 
   // create the acceptance thread
-  osThreadDef(Acceptance, AcceptanceNewClient, osPriorityLow, 0, configMINIMAL_STACK_SIZE *2);
+  osThreadDef(Acceptance, AcceptanceNewClient, osPriorityLow, 0, configMINIMAL_STACK_SIZE * 4);
 
   /* Infinite loop */
   for(;;)
@@ -393,7 +399,6 @@ void StartThread(void const * argument)
 		}
 		ClientHandle = osThreadCreate(osThread(Acceptance), &g);
 		debug_msg("new connection...! \r\n");
-		//write(g, (char*)uart_bufT, strlen(uart_bufT));
 		HAL_GPIO_TogglePin(LD1_GPIO_Port, LD1_Pin);
 		osDelay(100);
   }
