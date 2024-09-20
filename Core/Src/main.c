@@ -123,6 +123,7 @@ int main(void)
   MX_USART3_UART_Init();
   /* USER CODE BEGIN 2 */
   debug_msg("******** Start Nucleo ******************");
+  init_params();
 
   /* USER CODE END 2 */
 
