@@ -80,6 +80,7 @@ struct tcp_server_struct
   struct pbuf *p;         /* pointer on the received/to be transmitted pbuf */
 };
 
+const char *welcome_msg = "\r\nnucleo>";
 
 static err_t tcp_server_accept(void *arg, struct tcp_pcb *newpcb, err_t err);
 static err_t tcp_server_recv(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err);
@@ -166,6 +167,8 @@ static err_t tcp_server_accept(void *arg, struct tcp_pcb *newpcb, err_t err)
 
     /* initialize lwip tcp_poll callback function for newpcb */
     tcp_poll(newpcb, tcp_server_poll, 0);
+
+    tcp_write(newpcb, welcome_msg, strlen(welcome_msg), TCP_WRITE_FLAG_COPY);
 
     ret_err = ERR_OK;
   }
@@ -489,7 +492,7 @@ static void tcp_server_handle (struct tcp_pcb *tpcb, struct tcp_server_struct *e
 	cmd_string_interpret(buf, ans);
 	//strcat(ans,"\nhello");
 
-	strcat (ans,"\nnucleo-eth-template>");
+	strcat (ans, welcome_msg);
 
 
 	esTx->p->payload = (void *)ans;
